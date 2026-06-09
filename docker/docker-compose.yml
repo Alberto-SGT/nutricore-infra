@@ -1,0 +1,81 @@
+# docker-compose.yml — NutriCore
+# Levanta todo el entorno de desarrollo local con un solo comando:
+# docker compose up
+#
+# IMPORTANTE: Las credenciales NO están aquí.
+# Viven en el archivo .env (nunca sube a GitHub)
+# Copia docker/.env.example a docker/.env y rellena tus valores
+
+services:
+
+  # ─── BASE DE DATOS ────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: nutricore-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      # Las variables con ${} las lee Docker Compose del archivo .env
+      # que está en la misma carpeta que este docker-compose.yml
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nutricore-network
+
+  # ─── CACHÉ ────────────────────────────────────────────────────
+  redis:
+    image: redis:7
+    container_name: nutricore-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - nutricore-network
+
+  # ─── BACKEND ──────────────────────────────────────────────────
+  backend:
+    image: node:20
+    container_name: nutricore-backend
+    working_dir: /app
+    volumes:
+      - ../../nutricore-backend:/app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - nutricore-network
+
+  # ─── FRONTEND ─────────────────────────────────────────────────
+  frontend:
+    image: node:20
+    container_name: nutricore-frontend
+    working_dir: /app
+    volumes:
+      - ../../nutricore-frontend:/app
+    command: sh -c "npm install && npm run dev -- --host"
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:4000/api
+    depends_on:
+      - backend
+    networks:
+      - nutricore-network
+
+# ─── VOLÚMENES ────────────────────────────────────────────────
+volumes:
+  postgres_data:
+
+# ─── RED INTERNA ──────────────────────────────────────────────
+networks:
+  nutricore-network:
